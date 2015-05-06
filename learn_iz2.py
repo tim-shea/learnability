@@ -6,8 +6,8 @@ from syn import *
 from da_stdp import *
 
 timestep = 1.0*ms
-neuron_count = 500
-excitatory_count = 400
+neuron_count = 200
+excitatory_count = 160
 input_rate = 0.025
 minimum_weight = 0.0
 maximum_weight = 0.5
@@ -19,7 +19,7 @@ tau_post = 20*ms
 tau_elig = 100*ms
 
 stimulus_size = 25
-stimulus_count = 20
+stimulus_count = 10
 minimum_isi = 100*ms
 maximum_isi = 300*ms
 reward_amount = 1.0
@@ -41,7 +41,7 @@ reward : second (shared)
 stimulus : second (shared)
 t_stimulus : second (shared)
 dr/dt = (-r + rand())/dt : 1
-inject_spike = int(t >= t_stimulus) * stimuli(stimulus, i) : 1
+inject_spike = int(t >= t_stimulus) * stimuli(stimulus, i) * 0.1 : 1
 I = (eq_exc - v_reset) * tau_mem/ms * (inject_spike + r * %f) : 1
 """ % input_rate
 IN = NeuronGroup(neuron_count, model = input_model)
@@ -54,7 +54,7 @@ rewards = empty(0)
 @network_operation(dt = 1*ms, when = "resets")
 def next_stimulus():
 	global targets, rewards
-	if (IN.t > IN.t_stimulus):
+	if (IN.t > IN.t_stimulus + 10*ms):
 		if (IN.stimulus == 0*ms):
 			IN.reward = IN.t + 10*ms + random() * reward_delay
 			targets = append(targets, IN.t/second)
