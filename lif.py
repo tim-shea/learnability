@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from matplotlib.pyplot import *
 from brian2 import *
 
 tau_mem = 50*ms
@@ -41,7 +42,7 @@ def BernoulliSpikeInput(N, p, dt = None):
 	return IN
 
 if __name__ == "__main__":
-	prefs.codegen.target = 'weave'
+	prefs.codegen.target = 'numpy'
 	defaultclock.dt = 1*ms
 	duration = 1*second
 	

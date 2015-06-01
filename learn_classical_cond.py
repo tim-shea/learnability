@@ -6,8 +6,8 @@ from syn import *
 from stdp import *
 
 timestep = 1.0*ms
-neuron_count = 200
-excitatory_count = 160
+neuron_count = 1000
+excitatory_count = 800
 input_rate = 0.025
 minimum_weight = 0.0
 maximum_weight = 0.5
@@ -19,7 +19,7 @@ stimulus_count = 10
 minimum_isi = 100*ms
 maximum_isi = 300*ms
 
-prefs.codegen.target = 'weave'
+prefs.codegen.target = 'numpy'
 defaultclock.dt = timestep
 
 N = LifNeurons(neuron_count)
@@ -81,7 +81,7 @@ plot(spike_monitor.t/second, spike_monitor.i, ',k')
 plot(pairings, ones_like(pairings) * -10, 'ob')
 
 network.remove(spike_monitor)
-network.run(300*second, report = 'stdout', report_period = 10*second)
+network.run(60*second, report = 'stdout', report_period = 10*second)
 
 spike_monitor = SpikeMonitor(N)
 network.add(spike_monitor)

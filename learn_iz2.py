@@ -98,7 +98,7 @@ clipped_rewards = clipped_rewards[clipped_rewards < 10]
 plot(clipped_rewards, ones_like(clipped_rewards) * -10, '^r')
 
 network.remove(spike_monitor)
-network.run(300*second, report = 'stdout', report_period = 10*second)
+network.run(600*second, report = 'stdout', report_period = 10*second)
 
 spike_monitor = SpikeMonitor(N)
 network.add(spike_monitor)
@@ -106,10 +106,10 @@ network.run(10*second)
 subplot(412)
 plot(spike_monitor.t/second, spike_monitor.i, ',k')
 clipped_targets = numpy.array(targets)
-clipped_targets = clipped_targets[logical_and(clipped_targets >= 310, clipped_targets < 320)]
+clipped_targets = clipped_targets[logical_and(clipped_targets >= 610, clipped_targets < 620)]
 plot(clipped_targets, ones_like(clipped_targets) * -10, 'ob')
 clipped_rewards = numpy.array(rewards)
-clipped_rewards = clipped_rewards[logical_and(clipped_rewards >= 310, clipped_rewards < 320)]
+clipped_rewards = clipped_rewards[logical_and(clipped_rewards >= 610, clipped_rewards < 620)]
 plot(clipped_rewards, ones_like(clipped_rewards) * -10, '^r')
 
 subplot(413)
