@@ -1,7 +1,7 @@
 # learnability
 This is a set of python scripts for various STDP learning experiments.
 
-# prereqs
+## prereqs
 These scripts require scipy and brian2 and are developed for use with Python 2.7. The easiest way to run
 any script in this repo is to install the anaconda scipy distribution and then execute `pip install brian2`.
 
