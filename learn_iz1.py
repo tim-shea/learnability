@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 from lif import *
 from syn import *
@@ -91,15 +92,14 @@ def plot_sim(id):
 	hist(data['w_post'] / w_max, 20)
 	xlabel('Weight / Maximum')
 	ylabel('Count')
-	
 	show()
 	
 	datafile.close()
 
 if __name__ == "__main__":
 	import sys
-	command = sys.argv[1]
-	id = sys.argv[2]
+	command = sys.argv[1] if len(sys.argv) >= 2 else 'run'
+	id = sys.argv[2] if len(sys.argv) >= 3 else 'sim'
 	if command == 'run':
 		run_sim(id)
 	elif command == 'plot':

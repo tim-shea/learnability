@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 from matplotlib.pyplot import *
 from brian2 import *
