@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import learn_iz1
+from learn_iz1 import *
 
 if __name__ == "__main__":
     duration = 10*second
