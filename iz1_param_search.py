@@ -13,5 +13,5 @@ if __name__ == "__main__":
     for i in input_values:
         for c in connectivity_values:
             for r in reward_values:
-                learn_iz1.run_sim(experiment_id.format(simulation_number), duration, i, c, r)
+                run_sim(experiment_id.format(simulation_number), duration, i, c, r)
                 simulation_number += 1
