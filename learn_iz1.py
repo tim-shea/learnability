@@ -18,6 +18,9 @@ def run_sim(id, duration, input_rate, connectivity, reward_amount):
     prefs.codegen.target = 'numpy'
     defaultclock.dt = timestep
     
+    print("Running Simulation {0}: duration={1}, input={2}, connectivity={3}, reward={4}".format(
+          id, duration, input_rate, connectivity, reward_amount))
+    
     N = LifNeurons(neuron_count)
     IN = NoiseInput(N, input_rate)
     SE = DaStdpSynapses(N)
@@ -60,6 +63,27 @@ def run_sim(id, duration, input_rate, connectivity, reward_amount):
     numpy.savez(datafile, w_post=w_post, t=state_monitor.t/second, w0=state_monitor.w[0],
                 l0=state_monitor.l[0], rew=state_monitor.r[0], rate=rate_monitor.rate)
     datafile.close()
+    return (id, True)
+
+def parallel_function(fn):
+    def easy_parallelize(fn, inputs):
+        """ assumes f takes sequence as input, easy w/ Python's scope """
+        from multiprocessing import Pool
+        pool = Pool(processes=4)
+        result = pool.map(fn, inputs)
+        for r in result:
+            if r is not None and r[1]:
+                print("Simulation Cleaned {0}".format(r[0]))
+            else:
+                print("Simulation Failed {0}".format(r[0]))
+        pool.close()
+        pool.join()
+    from functools import partial
+    return partial(easy_parallelize, fn)
+
+def packed_run_sim(packed_args):
+    run_sim(*packed_args)
+run_sim.parallel = parallel_function(packed_run_sim)
 
 def plot_sim(id, duration):
     from scipy import stats
