@@ -6,7 +6,7 @@ tau_pos = 20*ms
 tau_neg = 20*ms
 tau_elig = 1000*ms
 a_pos = 1.0
-a_neg = -a_pos * tau_pos / tau_neg * 1.05
+a_neg = -a_pos * tau_pos / tau_neg * 1.5
 w_max = 1.0
 
 def DaStdpSynapses(N, dt = None):
