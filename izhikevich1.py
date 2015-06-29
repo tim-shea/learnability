@@ -74,10 +74,15 @@ def packed_run_sim(packed_args):
     run_sim(*packed_args)
 run_sim.parallel = parallel_function(packed_run_sim)
 
+def load_sim_data(name, index):
+    file = open("izhikevich1/{0}_{1}.dat".format(name, index), 'rb')
+    data = numpy.load(file)
+    #file.close()
+    return data
+
 def plot_sim(name, index):
     from scipy import stats
-    datafile = open("izhikevich1/{0}_{1}.dat".format(name, index), 'rb')
-    data = numpy.load(datafile)
+    data = load_sim_data(name, index)
     figure(figsize=(12,12))
     suptitle("Duration: {0}, Input: {1}, Connectivity: {2}, Reward: {3}".format(
           data['duration'], data['input_rate'], data['connectivity'], data['reward_amount']))
@@ -100,7 +105,7 @@ def plot_sim(name, index):
     xlabel("Weight / Maximum")
     ylabel("Count")
     show()
-    datafile.close()
+    #datafile.close()
 
 def param_search(name):
     from itertools import product, imap, izip
@@ -113,5 +118,35 @@ def param_search(name):
     inputs = imap(lambda i,x: (name, index, duration, x[0], x[1], x[2]),
                   range(0, num_simulations), levels)
     run_sim.parallel(inputs)
-    #for e in inputs:
-        #print("Running Simulation {0}: {1}".format(simulation_number, e))
+
+def plot_param_search(name):
+    import os.path
+    import scipy.stats
+    sim_data = []
+    index = 0
+    while os.path.exists("izhikevich1/{0}_{1}.dat".format(name, index)):
+        sim_data.append(load_sim_data(name, index))
+        index += 1
+    figure()
+    subplot(221)
+    for data in sim_data:
+        plot(data['t'], data['w0'] / w_max, label="IN: {0} CONN: {1}".format(data['input_rate'], data['connectivity']))
+    xlabel("Time (s)")
+    ylabel("Target Synapse Weight")
+    subplot(222)
+    for data in sim_data:
+        plot(data['t'], cumsum(data['rew']), label="IN: {0} CONN: {1}".format(data['input_rate'], data['connectivity']))
+    xlabel("Time (s)")
+    ylabel("Cumulative Reward")
+    subplot(223)
+    for data in sim_data:
+        rates = scipy.stats.binned_statistic(data['t'], data['rate'], bins=int(data['duration'] / 10.0*second))
+        plot(rates[1][1:], rates[0], label="IN: {0} CONN: {1}".format(data['input_rate'], data['connectivity']))
+    xlabel("Time (s)")
+    ylabel("Firing Rate (Hz)")
+    subplot(224)
+    for data in sim_data:
+	    hist(data['w_post'] / w_max, 20, histtype='step')
+    xlabel("Weight / Maximum")
+    ylabel("Count")
+    show()
