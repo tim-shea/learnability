@@ -49,6 +49,7 @@ def run_sim(name, index, duration, input_rate, connectivity, reward_rate, reward
         spikes_i.append(array(spike_monitor.i))
         network.remove(spike_monitor)
         network.run(59*second)
+        print("Stability Simulation {0}: {1:%}".format(index, float(period) / periods))
     datafile = open("stability/{0}_{1}.dat".format(name, index), 'wb')
     numpy.savez(datafile, duration=duration, input_rate=input_rate, connectivity=connectivity, reward_rate=reward_rate,
                 reward_amount=reward_amount, reward_duration=reward_duration, stdp_bias=stdp_bias,
