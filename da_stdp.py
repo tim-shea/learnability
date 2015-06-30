@@ -1,42 +1,37 @@
 # -*- coding: utf-8 -*-
 from brian2 import *
 
-tau_exc = 10*ms
-tau_pos = 20*ms
-tau_neg = 20*ms
-tau_elig = 1000*ms
-a_pos = 1.0
-a_neg = -a_pos * tau_pos / tau_neg * 1.5
-w_max = 1.0
+def DaStdpParams(tau_exc = 10*ms, tau_pos = 20*ms, tau_neg = 20*ms, tau_elig = 1000*ms,
+                 a_pos = 1.0, a_neg = -1.5, w_min = 0.0, w_max = 1.0):
+    return {'tau_exc': tau_exc, 'tau_pos': tau_pos, 'tau_neg': tau_neg, 'tau_elig': tau_elig,
+            'a_pos': a_pos, 'a_neg': a_neg, 'w_min': w_min, 'w_max': w_max}
 
-def DaStdpSynapses(N, dt = None):
+def DaStdpSynapses(N, params=DaStdpParams(), dt=None):
     update_model = """
     r : 1 (shared)
-    dl/dt = -l/tau_elig : 1
-    dw/dt = l * r : 1
+    dl/dt = -l / tau_elig : 1
+    dw/dt = l * r * int(w >= w_min) * int(w <= w_max) : 1
     dge/dt = -ge / tau_exc : 1
     ge_total_post = ge : 1 (summed)
     dstdp_pos/dt = -stdp_pos / tau_pos : 1 (event-driven)
     dstdp_neg/dt = -stdp_neg / tau_neg : 1 (event-driven)
-    """
+    """.format(**params)
     pre_model = """
     stdp_pos += a_pos
     l += stdp_neg
-    w = clip(w, 0, w_max)
     ge = w
-    """
+    """.format(**params)
     post_model = """
     stdp_neg += a_neg
     l += stdp_pos
     ge = 0
-    """
-    
-    S = Synapses(N, model = update_model, pre = pre_model, post = post_model,\
-        delay = {'post': 1*ms}, dt = dt)
+    """.format(**params)
+    S = Synapses(N, model=update_model, pre=pre_model, post=post_model,
+                 delay={'post': 1*ms}, dt=dt, namespace=params)
     return S
 
-def RewardUnit(S, reward_function, dt = None):
-    @network_operation(dt = dt)
+def RewardUnit(S, reward_function, dt=None):
+    @network_operation(dt=dt)
     def R():
         S.r = reward_function(S)
     return R
@@ -56,9 +51,10 @@ if __name__ == "__main__":
     
     N = LifNeurons(n)
     IN = NoiseInput(N, 0.025)
-    SE = DaStdpSynapses(N)
+    params = DaStdpParams()
+    SE = DaStdpSynapses(N, params)
     SE.connect('i < ne and i != j', p = 0.1)
-    SE.w = 'rand() * 0.75'
+    SE.w = '0 * rand() * 0.75'
     SI = InhibitorySynapses(N)
     SI.connect('i >= ne and i != j', p = 0.1)
     SI.w = -1.0
@@ -75,7 +71,7 @@ if __name__ == "__main__":
     
     subplot(131)
     title("Synaptic Weight Distribution Before Simulation")
-    hist(SE.w / w_max, 20)
+    hist(SE.w / params['w_max'], 20)
     xlabel('Weight / Maximum')
     ylabel('Count')
     
@@ -94,7 +90,7 @@ if __name__ == "__main__":
     
     subplot(133)
     title("Synaptic Weight Distribution After Simulation")
-    hist(SE.w / w_max, 20)
+    hist(SE.w / params['w_max'], 20)
     xlabel('Weight / Maximum')
     ylabel('Count')
     
