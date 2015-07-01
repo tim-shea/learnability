@@ -1,8 +1,15 @@
 # -*- coding: utf-8 -*-
 from brian2 import *
 
-def DaStdpParams(tau_exc = 10*ms, tau_pos = 20*ms, tau_neg = 20*ms, tau_elig = 1000*ms,
-                 a_pos = 1.0, a_neg = -1.5, w_min = 0.0, w_max = 1.0):
+def DaStdpParams(
+    tau_exc = 10*ms,
+    tau_pos = 20*ms,
+    tau_neg = 20*ms,
+    tau_elig = 1000*ms,
+    a_pos = 1.0,
+    a_neg = -1.5,
+    w_min = 0.0,
+    w_max = 1.0):
     return {'tau_exc': tau_exc, 'tau_pos': tau_pos, 'tau_neg': tau_neg, 'tau_elig': tau_elig,
             'a_pos': a_pos, 'a_neg': a_neg, 'w_min': w_min, 'w_max': w_max}
 
@@ -15,17 +22,17 @@ def DaStdpSynapses(N, params=DaStdpParams(), dt=None):
     ge_total_post = ge : 1 (summed)
     dstdp_pos/dt = -stdp_pos / tau_pos : 1 (event-driven)
     dstdp_neg/dt = -stdp_neg / tau_neg : 1 (event-driven)
-    """.format(**params)
+    """
     pre_model = """
     stdp_pos += a_pos
     l += stdp_neg
     ge = w
-    """.format(**params)
+    """
     post_model = """
     stdp_neg += a_neg
     l += stdp_pos
     ge = 0
-    """.format(**params)
+    """
     S = Synapses(N, model=update_model, pre=pre_model, post=post_model,
                  delay={'post': 1*ms}, dt=dt, namespace=params)
     return S
@@ -49,13 +56,14 @@ if __name__ == "__main__":
     n = 1000
     ne = 800
     
-    N = LifNeurons(n)
-    IN = NoiseInput(N, 0.025)
-    params = DaStdpParams()
+    params = LifParams()
+    params.update(SynParams())
+    params.update(DaStdpParams())
+    N = LifNeurons(n, params)
     SE = DaStdpSynapses(N, params)
     SE.connect('i < ne and i != j', p = 0.1)
-    SE.w = '0 * rand() * 0.75'
-    SI = InhibitorySynapses(N)
+    SE.w = 0.5
+    SI = InhibitorySynapses(N, params)
     SI.connect('i >= ne and i != j', p = 0.1)
     SI.w = -1.0
     def reward_function(S):
@@ -65,7 +73,7 @@ if __name__ == "__main__":
     state_monitor = StateMonitor(SE, ('w', 'l', 'r'), [0, 1, 2, 3, 4])
     
     network = Network()
-    network.add(N, IN, SE, SI, R, state_monitor)
+    network.add(N, SE, SI, R, state_monitor)
     
     figure()
     
@@ -75,7 +83,7 @@ if __name__ == "__main__":
     xlabel('Weight / Maximum')
     ylabel('Count')
     
-    network.run(duration, report = 'stdout', report_period = binsize)
+    network.run(duration, report='stdout', report_period=binsize, namespace={})
     
     subplot(132)
     title("Synapse Traces During Simulation")

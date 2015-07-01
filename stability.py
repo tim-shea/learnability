@@ -4,42 +4,36 @@ from lif import *
 from syn import *
 from da_stdp import *
 
-timestep = 1.0*ms
-neuron_count = 1000
-excitatory_count = 800
-excitatory_weight = 0.5
-inhibitory_weight = -1.0
-
 def run_sim(name, index, duration, input_rate, connectivity, reward_rate, reward_amount, reward_duration, stdp_bias):
     prefs.codegen.target = 'weave'
-    defaultclock.dt = timestep
+    defaultclock.dt = 1.0*ms
     print("Stability Simulation {0} Started: dur={1}, in={2}, conn={3}, rwr={4}, rwa={5}, rwd={6}, bias={7}".format(
           index, duration, input_rate, connectivity, reward_rate, reward_amount, reward_duration, stdp_bias))
-    N = LifNeurons(neuron_count)
-    IN = NoiseInput(N, input_rate)
-    stdp_params = DaStdpParams(a_neg = -1.0 + stdp_bias)
-    SE = DaStdpSynapses(N, stdp_params)
-    SE.connect('i < excitatory_count and i != j', p=connectivity)
-    SE.w = excitatory_weight
+    params = LifParams(noise_scale=input_rate)
+    params.update(SynParams())
+    params.update(DaStdpParams(a_neg=-1.0 + stdp_bias))
+    N = LifNeurons(1000, params)
+    SE = DaStdpSynapses(N, params)
+    SE.connect('i < 800 and i != j', p=connectivity)
+    SE.w = 0.5
     SI = InhibitorySynapses(N)
-    SI.connect('i >= excitatory_count and i != j', p=connectivity)
-    SI.w = inhibitory_weight
+    SI.connect('i >= 800 and i != j', p=connectivity)
+    SI.w = -1.0
     reward_model = """
     drtimer/dt = reward_rate : 1 (unless refractory)
     """
     DA = NeuronGroup(1, model=reward_model, threshold="rtimer >= 1.0", reset="rtimer = 0", refractory=reward_duration)
-    R = RewardUnit(SE, lambda S: 0 if DA.not_refractory[0] else (reward_amount / reward_duration), dt=timestep)
-    #@network_operation(dt=timestep)
-    #def R():
-    #    SE.r = 
+    R = RewardUnit(SE, lambda S: 0 if DA.not_refractory[0] else (reward_amount / reward_duration))
     rate_monitor = PopulationRateMonitor(N)
     state_monitor = StateMonitor(SE, ('w', 'r'), record=numpy.random.choice(len(SE.i), size=5, replace=False))
     network = Network()
-    network.add(N, IN, SE, SI, DA, R, rate_monitor, state_monitor)
+    network.add(N, SE, SI, DA, R, rate_monitor, state_monitor)
     periods = int(duration / 60*second)
     spikes_t = []
     spikes_i = []
     weights = ndarray((periods, size(SE.w)))
+    from timeit import default_timer
+    real_start_time = default_timer()
     for period in range(periods):
         weights[period] = SE.w
         spike_monitor = SpikeMonitor(N)
@@ -49,7 +43,8 @@ def run_sim(name, index, duration, input_rate, connectivity, reward_rate, reward
         spikes_i.append(array(spike_monitor.i))
         network.remove(spike_monitor)
         network.run(59*second)
-        print("Stability Simulation {0}: {1:%}".format(index, float(period) / periods))
+        real_elapsed_time = default_timer() - real_start_time
+        print("Stability Simulation {0}: {1} min. simulated ({2:%}) in {3} sec.".format(index, period + 1, float(period + 1) / periods, real_elapsed_time))
     datafile = open("stability/{0}_{1}.dat".format(name, index), 'wb')
     numpy.savez(datafile, duration=duration, input_rate=input_rate, connectivity=connectivity, reward_rate=reward_rate,
                 reward_amount=reward_amount, reward_duration=reward_duration, stdp_bias=stdp_bias,
