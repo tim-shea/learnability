@@ -31,11 +31,11 @@ def run_sim(name, index, duration, input_rate, connectivity, reward_rate, reward
     periods = int(duration / 60*second)
     spikes_t = []
     spikes_i = []
-    weights = ndarray((periods, size(SE.w)))
     from timeit import default_timer
     real_start_time = default_timer()
-    for period in range(periods):
-        weights[period] = SE.w
+    weights = ndarray((periods + 1, size(SE.w)))
+    weights[0] = SE.w
+    for period in range(1, periods + 1):
         spike_monitor = SpikeMonitor(N)
         network.add(spike_monitor)
         network.run(1*second)
@@ -44,7 +44,8 @@ def run_sim(name, index, duration, input_rate, connectivity, reward_rate, reward
         network.remove(spike_monitor)
         network.run(59*second)
         real_elapsed_time = default_timer() - real_start_time
-        print("Stability Simulation {0}: {1} min. simulated ({2:%}) in {3} sec.".format(index, period + 1, float(period + 1) / periods, real_elapsed_time))
+        print("Stability Simulation {0}: {1} min. simulated ({2:%}) in {3} sec.".format(index, period, float(period) / periods, real_elapsed_time))
+        weights[period] = SE.w
     datafile = open("stability/{0}_{1}.dat".format(name, index), 'wb')
     numpy.savez(datafile, duration=duration, input_rate=input_rate, connectivity=connectivity, reward_rate=reward_rate,
                 reward_amount=reward_amount, reward_duration=reward_duration, stdp_bias=stdp_bias,
@@ -75,7 +76,7 @@ def plot_sim(name, index):
     figure(figsize=(12,12))
     suptitle("Duration: {0}, Input: {1}, Connectivity: {2}, Reward: {3}".format(
           data['duration'], data['input_rate'], data['connectivity'], data['reward_amount']))
-    subplot(222)
+    subplot(311)
     plot(data['t'], data['w0'])
     plot(data['t'], data['w1'])
     plot(data['t'], data['w2'])
@@ -84,15 +85,20 @@ def plot_sim(name, index):
     plot(data['t'], data['r'])
     xlabel("Time (s)")
     ylabel("Reward")
-    subplot(223)
+    subplot(312)
     rates = stats.binned_statistic(data['t'], data['rate'], bins=int(data['duration'] / 1.0*second))
     plot(rates[1][1:], rates[0])
     xlabel("Time (s)")
     ylabel("Firing Rate (Hz)")
-    subplot(224)
-    for weight_dist in data['weights']:
-        hist(weight_dist / DaStdpParams()['w_max'], 20, histtype='step')
-    xlabel("Weight / Maximum")
+    subplot(313)
+    means = mean(data['weights'], axis=1)
+    upper = percentile(data['weights'], 75, axis=1)
+    lower = percentile(data['weights'], 25, axis=1)
+    num_periods = int(data['duration'] / 60)
+    plot(range(num_periods), means, '-r')
+    plot(range(num_periods), upper, '-k')
+    plot(range(num_periods), lower, '-k')
+    xlabel("Period (min.)")
     ylabel("Count")
     show()
     file.close()
