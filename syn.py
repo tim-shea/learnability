@@ -2,11 +2,17 @@
 from brian2 import *
 
 def SynParams(
+    w_exc = 1.0,
+    w_inh = -1.0,
     tau_exc = 10*ms,
-    tau_inh = 100*ms):
-    return {'tau_exc': tau_exc, 'tau_inh': tau_inh}
+    tau_inh = 100*ms,
+    post_delay = 1*ms,
+    condition = 'i != j',
+    connectivity = 0.1):
+    return {'w_exc': w_exc, 'w_inh': w_inh, 'tau_exc': tau_exc, 'tau_inh': tau_inh,
+            'post_delay': post_delay, 'condition': condition, 'connectivity': connectivity}
 
-def ExcitatorySynapses(N, params=SynParams(), dt=None):
+def ExcitatorySynapses(source, target=None, params=SynParams(), dt=None):
     update_model = """
     w : 1
     dge/dt = -ge / tau_exc : 1
@@ -14,11 +20,13 @@ def ExcitatorySynapses(N, params=SynParams(), dt=None):
     """
     pre_model = "ge = w"
     post_model = "ge = 0"
-    S = Synapses(N, model=update_model, pre=pre_model, post=post_model,
-                 delay={'post': 1*ms}, dt=dt, namespace=params)
-    return S
+    synapses = Synapses(source, target=target, model=update_model, pre=pre_model, post=post_model,
+                        delay={'post': params['post_delay']}, dt=dt, namespace=params)
+    synapses.connect(params['condition'], p=params['connectivity'])
+    synapses.w = params['w_exc']
+    return synapses
 
-def InhibitorySynapses(N, params=SynParams(), dt=None):
+def InhibitorySynapses(source, target=None, params=SynParams(), dt=None):
     update_model = """
     w : 1
     dgi/dt = -gi / tau_inh : 1
@@ -26,9 +34,11 @@ def InhibitorySynapses(N, params=SynParams(), dt=None):
     """
     pre_model = "gi = w"
     post_model = "gi = 0"
-    S = Synapses(N, model=update_model, pre=pre_model, post=post_model,
-                 delay={'post': 1*ms}, dt=dt, namespace=params)
-    return S
+    synapses = Synapses(source, target=target, model=update_model, pre=pre_model, post=post_model,
+                        delay={'post': params['post_delay']}, dt=dt, namespace=params)
+    synapses.connect(params['condition'], p=params['connectivity'])
+    synapses.w = params['w_inh']
+    return synapses
 
 if __name__ == "__main__":
     from lif import *
@@ -40,15 +50,14 @@ if __name__ == "__main__":
     figure()
     
     params = LifParams()
-    params.update(SynParams())
-    N = LifNeurons(2, params)
-    S = ExcitatorySynapses(N, params)
-    S.connect(0, 1)
-    S.w = 2.0
-    spike_monitor = SpikeMonitor(N)
-    state_monitor = StateMonitor(N, 'v', record = True, when = 'thresholds')
+    params.update(SynParams(connectivity=1.0))
+    neurons = LifNeurons(2, params)
+    synapses = ExcitatorySynapses(neurons[0:1], neurons, params)
+    synapses.w = 2.0
+    spike_monitor = SpikeMonitor(neurons)
+    state_monitor = StateMonitor(neurons, 'v', record = True, when = 'thresholds')
     network = Network()
-    network.add(N, S, spike_monitor, state_monitor)
+    network.add(neurons, synapses, spike_monitor, state_monitor)
     network.run(duration, report='stdout', namespace={})
     
     subplot(211)
@@ -60,14 +69,14 @@ if __name__ == "__main__":
     plot(state_monitor.t/ms, v[1], label = 'v1')
     legend()
     
-    N = LifNeurons(2, params)
-    S = InhibitorySynapses(N, params)
-    S.connect(0, 1)
-    S.w = -2.0
-    spike_monitor = SpikeMonitor(N)
-    state_monitor = StateMonitor(N, 'v', record=True, when='thresholds')
+    neurons = LifNeurons(2, params)
+    synapses = InhibitorySynapses(neurons[0:1], neurons, params)
+    synapses.connect(0, 1)
+    synapses.w = -2.0
+    spike_monitor = SpikeMonitor(neurons)
+    state_monitor = StateMonitor(neurons, 'v', record=True, when='thresholds')
     network = Network()
-    network.add(N, S, spike_monitor, state_monitor)
+    network.add(neurons, synapses, spike_monitor, state_monitor)
     network.run(duration, report='stdout', namespace={})
     
     subplot(212)

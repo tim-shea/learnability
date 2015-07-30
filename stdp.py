@@ -2,17 +2,20 @@
 from brian2 import *
 
 def StdpParams(
-    tau_exc = 10*ms,
     tau_pos = 20*ms,
     tau_neg = 20*ms,
     a_pos = 1.0,
     a_neg = -1.5,
     w_min = 0.0,
-    w_max = 1.0):
-    return {'tau_exc': tau_exc, 'tau_pos': tau_pos, 'tau_neg': tau_neg, 'a_pos': a_pos,
-            'a_neg': a_neg, 'w_min': w_min, 'w_max': w_max}
+    w_max = 1.0,
+    post_delay = 1*ms,
+    condition = 'i != j',
+    connectivity = 0.1):
+    return {'tau_pos': tau_pos, 'tau_neg': tau_neg,
+            'a_pos': a_pos, 'a_neg': a_neg, 'w_min': w_min, 'w_max': w_max,
+            'post_delay': post_delay, 'condition': condition, 'connectivity': connectivity}
 
-def StdpSynapses(N, params=StdpParams(), dt=None):
+def StdpSynapses(source, target=None, params=StdpParams(), dt=None):
     update_model = """
     w : 1
     dge/dt = -ge / tau_exc : 1
@@ -30,32 +33,30 @@ def StdpSynapses(N, params=StdpParams(), dt=None):
     w = clip(w + stdp_pos, w_min, w_max)
     ge = 0
     """
-    S = Synapses(N, model=update_model, pre=pre_model, post=post_model,
-                 delay={'post': 1*ms}, dt=dt, namespace=params)
-    return S
+    synapses = Synapses(source, target=target, model=update_model, pre=pre_model, post=post_model,
+                 delay={'post': params['post_delay']}, dt=dt, namespace=params)
+    synapses.connect(params['condition'], p=params['connectivity'])
+    synapses.w = params['w_stdp']
+    return synapses
 
 if __name__ == "__main__":
     import scipy.stats
     from lif import *
     from syn import *
-    
     prefs.codegen.target = 'weave'
     defaultclock.dt = 1*ms
-    
-    params = LifParams()
-    params['noise_scale'] = 0.025
+    params = LifParams(noise_scale=0.025)
     params.update(SynParams())
-    params.update(StdpParams())
-    N = LifNeurons(2, params)
-    SE = StdpSynapses(N, params)
-    SE.connect(0, 1)
-    state_monitor1 = StateMonitor(N, 'v', record=True)
-    state_monitor2 = StateMonitor(SE, ('stdp_pos', 'stdp_neg'), record=True)
+    params.update(StdpParams(connectivity=1.0))
+    neurons = LifNeurons(2, params)
+    excitatory_synapses = StdpSynapses(neurons[0:1], neurons, params)
+    state_monitor1 = StateMonitor(neurons, 'v', record=True)
+    state_monitor2 = StateMonitor(excitatory_synapses, ('stdp_pos', 'stdp_neg'), record=True)
     network = Network()
-    network.add(N, SE, state_monitor1, state_monitor2)
+    network.add(neurons, excitatory_synapses, state_monitor1, state_monitor2)
     network.run(10*second, report='stdout', report_period=10*second)
     
-    figure(figsize = (4, 4))
+    figure()
     subplot(211)
     title("Membrane Potentials of Two Connected Neurons")
     plot(state_monitor1.t/ms, state_monitor1.v[0]/mV)
@@ -70,24 +71,23 @@ if __name__ == "__main__":
     n = 1000
     ne = 800
     
-    N = LifNeurons(n, params)
-    SE = StdpSynapses(N, params)
-    SE.connect('i < ne and i != j', p = 0.1)
-    SE.w = 0.5
-    SI = InhibitorySynapses(N, params)
-    SI.connect('i >= ne and i != j', p = 0.1)
-    SI.w = -1.0
-    rate_monitor = PopulationRateMonitor(N)
+    params['connectivity'] = 0.1
+    neurons = LifNeurons(n, params)
+    excitatory_synapses = StdpSynapses(neurons[:ne], neurons, params)
+    #excitatory_synapses.w = 0.5
+    inhibitory_synapses = InhibitorySynapses(neurons[ne:], neurons, params)
+    #inhibitory_synapses.w = -1.0
+    rate_monitor = PopulationRateMonitor(neurons)
     
-    figure(figsize=(12,4))
+    figure()
     subplot(131)
     title("Synaptic Weight Distribution Before Simulation")
-    hist(SE.w / params['w_max'], 20)
+    hist(excitatory_synapses.w / params['w_max'], 20)
     xlabel('Weight / Maximum')
     ylabel('Count')
     
     network = Network()
-    network.add(N, SE, SI, rate_monitor)
+    network.add(neurons, excitatory_synapses, inhibitory_synapses, rate_monitor)
     network.run(duration, report = 'stdout', report_period=10*second)
     
     subplot(132)
@@ -99,7 +99,7 @@ if __name__ == "__main__":
     
     subplot(133)
     title("Synaptic Weight Distribution After Simulation")
-    hist(SE.w / params['w_max'], 20)
+    hist(excitatory_synapses.w / params['w_max'], 20)
     xlabel('Weight / Maximum')
     ylabel('Count')
     

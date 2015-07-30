@@ -46,13 +46,12 @@ def run_sim(name, index, duration, input_rate, connectivity, reward_rate, reward
         real_elapsed_time = default_timer() - real_start_time
         print("Stability Simulation {0}: {1} min. simulated ({2:%}) in {3} sec.".format(index, period, float(period) / periods, real_elapsed_time))
         weights[period] = SE.w
-    datafile = open("stability/{0}_{1}.dat".format(name, index), 'wb')
-    numpy.savez(datafile, duration=duration, input_rate=input_rate, connectivity=connectivity, reward_rate=reward_rate,
+    filename = "stability/{0}_{1}".format(name, index)
+    numpy.savez_compressed(filename, duration=duration, input_rate=input_rate, connectivity=connectivity, reward_rate=reward_rate,
                 reward_amount=reward_amount, reward_duration=reward_duration, stdp_bias=stdp_bias,
                 t=rate_monitor.t, rate=rate_monitor.rate,
                 w0=state_monitor.w[0], w1=state_monitor.w[1], w2=state_monitor.w[2], w3=state_monitor.w[3], w4=state_monitor.w[4],
                 r=state_monitor.r[0], weights=weights, spikes_t=spikes_t, spikes_i=spikes_i)
-    datafile.close()
     print("Stability Simulation {0} Ended".format(index))
 
 def parallel_function(fn):

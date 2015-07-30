@@ -14,19 +14,25 @@ reward_decay = 0.99
 coincidence_window = 20*ms
 reward_delay = 0.5*second
 
-def run_sim(name, index, duration, input_rate, connectivity, reward_amount):
-    prefs.codegen.target = 'weave'
-    defaultclock.dt = timestep
-    print("Izhikevich1 Simulation {0} Started: duration={1}, input={2}, connectivity={3}, reward={4}".format(
-          name, index, duration, input_rate, connectivity, reward_amount))
-    N = LifNeurons(neuron_count)
-    IN = NoiseInput(N, input_rate)
-    SE = DaStdpSynapses(N)
-    SE.connect('i < excitatory_count and i != j', p=connectivity)
-    SE.w = 'minimum_excitatory_weight + rand() * (maximum_excitatory_weight - minimum_excitatory_weight)'
-    SI = InhibitorySynapses(N)
-    SI.connect('i >= excitatory_count and i != j', p=connectivity)
-    SI.w = inhibitory_weight
+def get_params(input_rate):
+    params = LifParams(noise_scale=input_rate)
+    params.update(SynParams())
+    params.update(DaStdpParams())
+    return params
+
+def setup_network(params):
+    neurons = LifNeurons(neuron_count)
+    excitatory_synapses = DaStdpSynapses(N)
+    excitatory_synapses.connect('i < excitatory_count and i != j', p=connectivity)
+    excitatory_synapses.w = 'minimum_excitatory_weight + rand() * (maximum_excitatory_weight - minimum_excitatory_weight)'
+    inhibitory_synapses = InhibitorySynapses(N)
+    inhibitory_synapses.connect('i >= excitatory_count and i != j', p=connectivity)
+    inhibitory_synapses.w = inhibitory_weight
+    network = Network()
+    network.add(neurons, excitatory_synapses, inhibitory_synapses)
+    return neurons, excitatory_synapses, inhibitory_synapses, network
+
+def setup_task(N, SE, NET, params):
     det_model = '''
     pre_spike : second
     detected : second
@@ -44,11 +50,20 @@ def run_sim(name, index, duration, input_rate, connectivity, reward_amount):
     def reward_function(S):
         return S.r * reward_decay + (reward_amount if int(S.t/ms) == int((D.detected + reward_delay)/ms) else 0)
     R = RewardUnit(SE, reward_function)
-    rate_monitor = PopulationRateMonitor(N)
-    state_monitor = StateMonitor(SE, ('r', 'l', 'w'), record=[0])
-    network = Network()
-    network.add(N, IN, SE, SI, D, R, rate_monitor, state_monitor)
-    network.run(duration, report='stdout', report_period=60*second)
+    MR = PopulationRateMonitor(N)
+    MS = StateMonitor(SE, ('r', 'l', 'w'), record=[0])
+    NET.add(D, R, MR, MS)
+    return D, R, MR, MS
+
+def run_sim(name, index, duration, input_rate, connectivity, reward_amount):
+    prefs.codegen.target = 'weave'
+    defaultclock.dt = timestep
+    params = get_params()
+    print("Izhikevich1 Simulation {0} Started: duration={1}, input={2}, connectivity={3}, reward={4}".format(
+          name, index, duration, input_rate, connectivity, reward_amount))
+    N, IN, SE, SI, NET = setup_network(params)
+    D, R, MR, MS = setup_task(N, SE, NET, params)
+    NET.run(duration, report='stdout', report_period=60*second)
     w_post = SE.w
     datafile = open("izhikevich1/{0}_{1}.dat".format(name, index), 'wb')
     numpy.savez(datafile, duration=duration, input_rate=input_rate, connectivity=connectivity, reward_amount=reward_amount,
@@ -77,12 +92,11 @@ run_sim.parallel = parallel_function(packed_run_sim)
 def load_sim_data(name, index):
     file = open("izhikevich1/{0}_{1}.dat".format(name, index), 'rb')
     data = numpy.load(file)
-    #file.close()
-    return data
+    return (data, file)
 
 def plot_sim(name, index):
     from scipy import stats
-    data = load_sim_data(name, index)
+    data, file = load_sim_data(name, index)
     figure(figsize=(12,12))
     suptitle("Duration: {0}, Input: {1}, Connectivity: {2}, Reward: {3}".format(
           data['duration'], data['input_rate'], data['connectivity'], data['reward_amount']))
@@ -105,7 +119,7 @@ def plot_sim(name, index):
     xlabel("Weight / Maximum")
     ylabel("Count")
     show()
-    #datafile.close()
+    file.close()
 
 def param_search(name):
     from itertools import product, imap, izip

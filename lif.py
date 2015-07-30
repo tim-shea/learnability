@@ -25,10 +25,10 @@ def LifNeurons(n, params=LifParams(), dt=None):
     dv/dt = (-(v - eq_leak) + (eq_exc - v) * ge_total + (v - eq_inh) * gi_total + I) / tau_mem : 1 (unless refractory)
     """
     reset_model = "v = v_reset"
-    N = NeuronGroup(n, neuron_model, threshold='v > v_threshold', reset=reset_model, refractory='refractory_period',
+    neurons = NeuronGroup(n, neuron_model, threshold='v > v_threshold', reset=reset_model, refractory='refractory_period',
                     namespace=params, dt=dt)
-    N.v = "v_reset + (v_threshold - v_reset) * rand()"
-    return N
+    neurons.v = "v_reset + (v_threshold - v_reset) * rand()"
+    return neurons
 
 if __name__ == "__main__":
     from matplotlib.pyplot import *
@@ -37,11 +37,11 @@ if __name__ == "__main__":
     duration = 1*second
     
     params = LifParams()
-    N = LifNeurons(1, params)
-    spike_monitor = SpikeMonitor(N)
-    state_monitor = StateMonitor(N, ('v', 'I'), record=True, when='thresholds')
+    neurons = LifNeurons(1, params)
+    spike_monitor = SpikeMonitor(neurons)
+    state_monitor = StateMonitor(neurons, ('v', 'I'), record=True, when='thresholds')
     network = Network()
-    network.add(N, spike_monitor, state_monitor)
+    network.add(neurons, spike_monitor, state_monitor)
     network.run(duration, report='stdout', namespace={})
     
     figure()

@@ -2,18 +2,21 @@
 from brian2 import *
 
 def DaStdpParams(
-    tau_exc = 10*ms,
     tau_pos = 20*ms,
     tau_neg = 20*ms,
     tau_elig = 1000*ms,
     a_pos = 1.0,
     a_neg = -1.5,
     w_min = 0.0,
-    w_max = 1.0):
-    return {'tau_exc': tau_exc, 'tau_pos': tau_pos, 'tau_neg': tau_neg, 'tau_elig': tau_elig,
-            'a_pos': a_pos, 'a_neg': a_neg, 'w_min': w_min, 'w_max': w_max}
+    w_max = 1.0,
+    post_delay = 1*ms,
+    condition = 'i != j',
+    connectivity = 0.1):
+    return {'tau_pos': tau_pos, 'tau_neg': tau_neg, 'tau_elig': tau_elig,
+            'a_pos': a_pos, 'a_neg': a_neg, 'w_min': w_min, 'w_max': w_max,
+            'post_delay': post_delay, 'condition': condition, 'connectivity': connectivity}
 
-def DaStdpSynapses(N, params=DaStdpParams(), dt=None):
+def DaStdpSynapses(source, target=None, params=DaStdpParams(), dt=None):
     update_model = """
     r : 1 (shared)
     dl/dt = -l / tau_elig : 1
@@ -33,15 +36,16 @@ def DaStdpSynapses(N, params=DaStdpParams(), dt=None):
     l += stdp_pos
     ge = 0
     """
-    S = Synapses(N, model=update_model, pre=pre_model, post=post_model,
-                 delay={'post': 1*ms}, dt=dt, namespace=params)
-    return S
+    synapses = Synapses(source, target=target, model=update_model, pre=pre_model, post=post_model,
+                 delay={'post': params['post_delay']}, dt=dt, namespace=params)
+    synapses.connect(params['condition'], p=params['connectivity'])
+    return synapses
 
-def RewardUnit(S, reward_function, dt=None):
+def RewardUnit(synapses, reward_function, dt=None):
     @network_operation(dt=dt)
-    def R():
-        S.r = reward_function(S)
-    return R
+    def reward_unit():
+        synapses.r = reward_function(synapses)
+    return reward_unit
 
 if __name__ == "__main__":
     from scipy import signal, stats
@@ -59,27 +63,25 @@ if __name__ == "__main__":
     params = LifParams()
     params.update(SynParams())
     params.update(DaStdpParams())
-    N = LifNeurons(n, params)
-    SE = DaStdpSynapses(N, params)
-    SE.connect('i < ne and i != j', p = 0.1)
-    SE.w = 0.5
-    SI = InhibitorySynapses(N, params)
-    SI.connect('i >= ne and i != j', p = 0.1)
-    SI.w = -1.0
-    def reward_function(S):
-        return 0.002 + (S.r - 0.002) * 0.9 + (1 if int(S.t/ms) % 2000 == 1000 else 0)
-    R = RewardUnit(SE, reward_function, 10*ms)
+    neurons = LifNeurons(n, params)
+    excitatory_synapses = DaStdpSynapses(neurons[:ne], neurons, params)
+    excitatory_synapses.w = 0.5
+    inhibitory_synapses = InhibitorySynapses(neurons[ne:], neurons, params)
+    inhibitory_synapses.w = -1.0
+    def reward_function(synapses):
+        return 0.002 + (synapses.r - 0.002) * 0.9 + (1 if int(synapses.t/ms) % 2000 == 1000 else 0)
+    reward_unit = RewardUnit(excitatory_synapses, reward_function, 10*ms)
     
-    state_monitor = StateMonitor(SE, ('w', 'l', 'r'), [0, 1, 2, 3, 4])
+    state_monitor = StateMonitor(excitatory_synapses, ('w', 'l', 'r'), [0, 1, 2, 3, 4])
     
     network = Network()
-    network.add(N, SE, SI, R, state_monitor)
+    network.add(neurons, excitatory_synapses, inhibitory_synapses, reward_unit, state_monitor)
     
     figure()
     
     subplot(131)
     title("Synaptic Weight Distribution Before Simulation")
-    hist(SE.w / params['w_max'], 20)
+    hist(excitatory_synapses.w / params['w_max'], 20)
     xlabel('Weight / Maximum')
     ylabel('Count')
     
@@ -98,7 +100,7 @@ if __name__ == "__main__":
     
     subplot(133)
     title("Synaptic Weight Distribution After Simulation")
-    hist(SE.w / params['w_max'], 20)
+    hist(excitatory_synapses.w / params['w_max'], 20)
     xlabel('Weight / Maximum')
     ylabel('Count')
     
