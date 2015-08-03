@@ -7,13 +7,14 @@ def DaStdpParams(
     tau_elig = 1000*ms,
     a_pos = 1.0,
     a_neg = -1.5,
+    w_exc = 0.5,
     w_min = 0.0,
     w_max = 1.0,
     post_delay = 1*ms,
     condition = 'i != j',
     connectivity = 0.1):
     return {'tau_pos': tau_pos, 'tau_neg': tau_neg, 'tau_elig': tau_elig,
-            'a_pos': a_pos, 'a_neg': a_neg, 'w_min': w_min, 'w_max': w_max,
+            'a_pos': a_pos, 'a_neg': a_neg, 'w_exc': w_exc, 'w_min': w_min, 'w_max': w_max,
             'post_delay': post_delay, 'condition': condition, 'connectivity': connectivity}
 
 def DaStdpSynapses(source, target=None, params=DaStdpParams(), dt=None):
@@ -39,6 +40,7 @@ def DaStdpSynapses(source, target=None, params=DaStdpParams(), dt=None):
     synapses = Synapses(source, target=target, model=update_model, pre=pre_model, post=post_model,
                  delay={'post': params['post_delay']}, dt=dt, namespace=params)
     synapses.connect(params['condition'], p=params['connectivity'])
+    synapses.w = params['w_exc']
     return synapses
 
 def RewardUnit(synapses, reward_function, dt=None):
@@ -69,39 +71,24 @@ if __name__ == "__main__":
     inhibitory_synapses = InhibitorySynapses(neurons[ne:], neurons, params)
     inhibitory_synapses.w = -1.0
     def reward_function(synapses):
-        return 0.002 + (synapses.r - 0.002) * 0.9 + (1 if int(synapses.t/ms) % 2000 == 1000 else 0)
+        return synapses.r * 0.9 + (0.01 if int(synapses.t/ms) % 2000 == 1000 else 0)
     reward_unit = RewardUnit(excitatory_synapses, reward_function, 10*ms)
     
-    state_monitor = StateMonitor(excitatory_synapses, ('w', 'l', 'r'), [0, 1, 2, 3, 4])
+    state_monitor = StateMonitor(excitatory_synapses, ('w', 'l', 'r'), range(10))
     
     network = Network()
     network.add(neurons, excitatory_synapses, inhibitory_synapses, reward_unit, state_monitor)
-    
-    figure()
-    
-    subplot(131)
-    title("Synaptic Weight Distribution Before Simulation")
-    hist(excitatory_synapses.w / params['w_max'], 20)
-    xlabel('Weight / Maximum')
-    ylabel('Count')
-    
     network.run(duration, report='stdout', report_period=binsize, namespace={})
     
-    subplot(132)
-    title("Synapse Traces During Simulation")
-    plot(state_monitor.t/second, state_monitor.w[0], label="Synapse 0")
-    plot(state_monitor.t/second, state_monitor.w[1], label="Synapse 1")
-    plot(state_monitor.t/second, state_monitor.w[2], label="Synapse 2")
-    plot(state_monitor.t/second, state_monitor.w[3], label="Synapse 3")
-    plot(state_monitor.t/second, state_monitor.w[4], label="Synapse 4")
-    plot(state_monitor.t/second, state_monitor.r[0], label="Dopamine")
+    figure()
+    subplot(211)
+    title("Synaptic Weights")
+    for i in range(10):
+        plot(state_monitor.t/second, state_monitor.w[i], label="Synapse {0}".format(i))
     xlabel('Time (s)')
     ylabel('Weight')
-    
-    subplot(133)
-    title("Synaptic Weight Distribution After Simulation")
-    hist(excitatory_synapses.w / params['w_max'], 20)
-    xlabel('Weight / Maximum')
-    ylabel('Count')
-    
+    subplot(212)
+    plot(state_monitor.t/second, state_monitor.r[0], label="Reward")
+    xlabel('Time (s)')
+    ylabel('Reward')
     show()

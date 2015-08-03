@@ -12,22 +12,18 @@ def run_sim(name, index, duration, input_rate, connectivity, reward_rate, reward
     params = LifParams(noise_scale=input_rate)
     params.update(SynParams())
     params.update(DaStdpParams(a_neg=-1.0 + stdp_bias))
-    N = LifNeurons(1000, params)
-    SE = DaStdpSynapses(N, params)
-    SE.connect('i < 800 and i != j', p=connectivity)
-    SE.w = 0.5
-    SI = InhibitorySynapses(N)
-    SI.connect('i >= 800 and i != j', p=connectivity)
-    SI.w = -1.0
+    neuron = LifNeurons(1000, params)
+    excitatory_synapses = DaStdpSynapses(neurons[:800], neurons, params)
+    inhibitory_synapses = InhibitorySynapses(neurons[800:], neurons, params)
     reward_model = """
     drtimer/dt = reward_rate : 1 (unless refractory)
     """
-    DA = NeuronGroup(1, model=reward_model, threshold="rtimer >= 1.0", reset="rtimer = 0", refractory=reward_duration)
-    R = RewardUnit(SE, lambda S: 0 if DA.not_refractory[0] else (reward_amount / reward_duration))
-    rate_monitor = PopulationRateMonitor(N)
-    state_monitor = StateMonitor(SE, ('w', 'r'), record=numpy.random.choice(len(SE.i), size=5, replace=False))
+    reward_timer = NeuronGroup(1, model=reward_model, threshold="rtimer >= 1.0", reset="rtimer = 0", refractory=reward_duration)
+    reward_unit = RewardUnit(excitatory_synapses, lambda synapses: 0 if reward_timer.not_refractory[0] else (reward_amount / reward_duration))
+    rate_monitor = PopulationRateMonitor(neurons)
+    state_monitor = StateMonitor(SE, ('w', 'r'), record=numpy.random.choice(len(excitatory_synapses.i), size=5, replace=False))
     network = Network()
-    network.add(N, SE, SI, DA, R, rate_monitor, state_monitor)
+    network.add(neurons, excitatory_synapses, inhibitory_synapses, reward_timer, reward_unit, rate_monitor, state_monitor)
     periods = int(duration / 60*second)
     spikes_t = []
     spikes_i = []
@@ -85,18 +81,16 @@ def plot_sim(name, index):
     xlabel("Time (s)")
     ylabel("Reward")
     subplot(312)
-    rates = stats.binned_statistic(data['t'], data['rate'], bins=int(data['duration'] / 1.0*second))
+    rates = stats.binned_statistic(data['t'], data['rate'], bins=int(data['duration']/1.0*second))
     plot(rates[1][1:], rates[0])
     xlabel("Time (s)")
     ylabel("Firing Rate (Hz)")
     subplot(313)
-    means = mean(data['weights'], axis=1)
-    upper = percentile(data['weights'], 75, axis=1)
-    lower = percentile(data['weights'], 25, axis=1)
+    percentiles = percentile(data['weights'], [95, 75, 50, 25, 5], axis=1)
+    colors = [(0.7,0.7,1), (0.3,0.3,1), (0,0,0.5), (0.3,0.3,1), (0.7,0.7,1)]
     num_periods = int(data['duration'] / 60)
-    plot(range(num_periods), means, '-r')
-    plot(range(num_periods), upper, '-k')
-    plot(range(num_periods), lower, '-k')
+    for y, c in zip(percentiles, colors):
+        plot(range(num_periods), y, lw=2.5, color=c)
     xlabel("Period (min.)")
     ylabel("Count")
     show()
@@ -138,7 +132,7 @@ def plot_param_search(name):
     ylabel("Target Synapse Weight")
     subplot(222)
     for data in dataset:
-        plot(data['t'], cumsum(data['rew']), label="IN: {0} CONN: {1}".format(data['input_rate'], data['connectivity']))
+        plot(data['t'], cumsum(data['r']), label="IN: {0} CONN: {1}".format(data['input_rate'], data['connectivity']))
     xlabel("Time (s)")
     ylabel("Cumulative Reward")
     subplot(223)
@@ -149,9 +143,37 @@ def plot_param_search(name):
     ylabel("Firing Rate (Hz)")
     subplot(224)
     for data in dataset:
-	    hist(data['w_post'] / DaStdpParams()['w_max'], 20, histtype='step')
+	    hist(data['weights'][-1] / DaStdpParams()['w_max'], 20, histtype='step')
     xlabel("Weight / Maximum")
     ylabel("Count")
+    for file in fileset:
+        file.close()
+    show()
+
+def plot_stability(name):
+    import os.path
+    import scipy.stats
+    fileset = []
+    dataset = []
+    index = 0
+    while os.path.exists("stability/{0}_{1}.dat".format(name, index)):
+        file = open("stability/{0}_{1}.dat".format(name, index), 'rb')
+        fileset.append(file)
+        data = numpy.load(file)
+        dataset.append(data)
+        index += 1
+    figure()
+    subplot(211)
+    values = array([(data['input_rate'], data['connectivity'], mean(data['rate']), std(data['rate'])) for data in dataset])
+    colors = (values[:,1] - min(values[:,1])) / max(values[:,1])
+    scatter(values[:,2], values[:,3], c=colors, alpha=0.25, edgecolors='none', cmap=get_cmap('rainbow'), s=50)
+    legend(unique(values[:,1]), )
+    xlabel("Firing Rate (Hz)")
+    ylabel("Standard Deviation")
+    subplot(212)
+    scatter(values[:,0], values[:,3] / values[:,2], c=colors, cmap=get_cmap('hsv'), s=50)
+    xlabel("Input Rate")
+    ylabel("Coefficient of Variation")
     for file in fileset:
         file.close()
     show()
