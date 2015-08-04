@@ -26,7 +26,7 @@ def LifNeurons(n, params=LifParams(), dt=None):
     """
     reset_model = "v = v_reset"
     neurons = NeuronGroup(n, neuron_model, threshold='v > v_threshold', reset=reset_model, refractory='refractory_period',
-                    namespace=params, dt=dt)
+                          namespace=params, dt=dt)
     neurons.v = "v_reset + (v_threshold - v_reset) * rand()"
     return neurons
 

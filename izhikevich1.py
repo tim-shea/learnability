@@ -14,8 +14,8 @@ reward_decay = 0.99
 coincidence_window = 20*ms
 reward_delay = 0.5*second
 
-def get_params(input_rate):
-    params = LifParams(noise_scale=input_rate)
+def get_params():
+    params = LifParams()
     params.update(SynParams())
     params.update(DaStdpParams())
     return params
@@ -32,7 +32,7 @@ def setup_network(params):
     network.add(neurons, excitatory_synapses, inhibitory_synapses)
     return neurons, excitatory_synapses, inhibitory_synapses, network
 
-def setup_task(N, SE, NET, params):
+def setup_task(neurons, excitatory_synapses, network, params):
     det_model = '''
     pre_spike : second
     detected : second
@@ -42,44 +42,46 @@ def setup_task(N, SE, NET, params):
     set_detected = int(t - pre_spike < coincidence_window)
     detected = detected * (1 - set_detected) + t * set_detected
     '''
-    SE.w[0] = 0
-    source = SE.i[0]
-    target = SE.j[0]
-    D = Synapses(N, model=det_model, pre=det_pre, post=det_post, connect='i == source and j == target')
-    D.detected = -reward_delay
-    def reward_function(S):
-        return S.r * reward_decay + (reward_amount if int(S.t/ms) == int((D.detected + reward_delay)/ms) else 0)
-    R = RewardUnit(SE, reward_function)
-    MR = PopulationRateMonitor(N)
-    MS = StateMonitor(SE, ('r', 'l', 'w'), record=[0])
-    NET.add(D, R, MR, MS)
-    return D, R, MR, MS
+    excitatory_synapses.w[0] = 0
+    source = excitatory_synapses.i[0]
+    target = excitatory_synapses.j[0]
+    detector = Synapses(neurons, model=det_model, pre=det_pre, post=det_post, connect='i == source and j == target')
+    detector.detected = -reward_delay
+    def reward_function(synapses):
+        return (synapses.r * reward_decay +
+            (reward_amount if int(synapses.t/ms) == int((detector.detected + reward_delay)/ms) else 0))
+    reward_unit = RewardUnit(excitatory_synapses, reward_function)
+    rate_monitor = PopulationRateMonitor(neurons)
+    state_monitor = StateMonitor(excitatory_synapses, ('r', 'l', 'w'), record=[0])
+    network.add(detector, reward_unit, rate_monitor, state_monitor)
+    return detector, reward_unit, rate_monitor, state_monitor
 
 def run_sim(name, index, duration, input_rate, connectivity, reward_amount):
     prefs.codegen.target = 'weave'
     defaultclock.dt = timestep
     params = get_params()
-    print("Izhikevich1 Simulation {0} Started: duration={1}, input={2}, connectivity={3}, reward={4}".format(
+    params.update({'noise_scale': input_rate,
+                   'connectivity': connectivity,
+                   'reward_amount': reward_amount})
+    print("Simulation {0} Started: duration={1}, input={2}, connectivity={3}, reward={4}".format(
           name, index, duration, input_rate, connectivity, reward_amount))
-    N, IN, SE, SI, NET = setup_network(params)
-    D, R, MR, MS = setup_task(N, SE, NET, params)
-    NET.run(duration, report='stdout', report_period=60*second)
-    w_post = SE.w
+    neurons, excitatory_synapses, inhibitory_synapses, network = setup_network(params)
+    detector, reward_unit, rate_monitor, state_monitor = setup_task(neurons, excitatory_synapses, network, params)
+    network.run(duration, report='stdout', report_period=60*second)
+    w_post = excitatory_synapses.w
     datafile = open("izhikevich1/{0}_{1}.dat".format(name, index), 'wb')
     numpy.savez(datafile, duration=duration, input_rate=input_rate, connectivity=connectivity, reward_amount=reward_amount,
                 w_post=w_post, t=state_monitor.t/second, w0=state_monitor.w[0], l0=state_monitor.l[0],
                 rew=state_monitor.r[0], rate=rate_monitor.rate)
     datafile.close()
+    print("Simulation Ended")
     return (index, True)
 
 def parallel_function(fn):
     def easy_parallelize(fn, inputs):
         from multiprocessing import Pool
         pool = Pool(processes=4)
-        result = pool.map(fn, inputs)
-        for r in result:
-            if r is not None and r[1]:
-                print("Simulation Cleaned {0}".format(r[0]))
+        pool.map(fn, inputs)
         pool.close()
         pool.join()
     from functools import partial
