@@ -8,7 +8,7 @@ import learnability
 def get_param_search_levels(name, slice_levels=None):
     from itertools import product
     duration = 3600*second
-    input_levels = [0.025, 0.0375, 0.05, 0.075, 0.1]
+    input_levels = [0.025, 0.03, 0.0375, 0.05]
     connectivity_levels = [0.05, 0.1, 0.2]
     reward_delay_levels = [500*ms]
     reward_amount_levels = [10*ms, 100*ms]
@@ -22,35 +22,61 @@ def get_param_search_levels(name, slice_levels=None):
         slice_levels = (0, len(inputs))
     return inputs[slice_levels[0]:slice_levels[1]]
 
-def run(name, index, duration, input_rate, connectivity, reward_delay, reward_amount, reward_duration, stdp_bias):
+def setup(input_rate, connectivity, reward_delay, reward_amount, reward_duration, stdp_bias):
     params = LifParams(noise_scale=input_rate)
     params.update(SynParams())
     params.update(DaStdpParams(a_neg=-1.0 + stdp_bias, connectivity=connectivity))
     params.update({'reward_delay': reward_delay})
     neurons, excitatory_synapses, inhibitory_synapses, network = learnability.setup_network(params)
-    stimulus_model = """
     
-    response_model = """    
-    response_period : 1
+    stimulus = NeuronGroup(1, model="dtimer/dt = 1/second : 1", threshold="timer > 1", reset="timer = 0", namespace=params)
+    stimulus_synapse_model = """
+    tstimulus : second
+    ge_total_post = 2.5 * int(t - tstimulus < 20*ms) : 1 (summed)
+    """
+    stimulus_synapses = Synapses(stimulus, neurons, model=stimulus_synapse_model, pre="tstimulus = t", connect="j < 50")
+    stimulus_synapses.tstimulus = -1*second
+    
+    response_model = """
+    tresponse : second
     response_one : 1
     response_two : 1
-    response_rate = response_one / (response_two + 1) : 1 (linked)
-    dstim
+    response_rate = response_one / (response_two + 1) : 1
+    dreward/dt = response_rate / reward_delay : 1 (unless refractory)
     """
-    response_model = """
-    drewtimer/dt = response_rate / reward_delay : 1 (unless refractory)
+    response_reset = """
+    response_one = 0
+    response_two = 0
+    reward = 0
     """
-    response_unit = NeuronGroup(1, model=response_model, threshold="rewtimer >= 1",
-                               reset="rtimer = 0", refractory=reward_duration,
-                               namespace=params)
-    response_link_model = "response_period : 1 (shared)"
-    response_link_pre = """
-    response_one += 1 * int(i < 50) * response_period
-    response_two += 1 * int(i > 50) * response_period
+    response = NeuronGroup(1, model=response_model, threshold="reward > 1", reset=response_reset,
+                           refractory=reward_duration, namespace=params)
+    response.tresponse = -1*second
+    response.response_one = 0
+    response.response_two = 0
+    
+    s_r_pre = """
+    tresponse = t
+    response_one = 0
+    response_two = 0
     """
-    response_link = Synapses(neurons, reward_timer, model=response_link_model, pre=reward_link_pre, connect="i < 100")
-    response_link.response_period = 0
-    reward_function = lambda synapses: 0 if reward_threshold.not_refractory[0] else (reward_amount / reward_duration)
+    s_r_synapse = Synapses(stimulus, response, pre=s_r_pre, connect=True)
+    response_synapse_pre = """
+    response_one += 1 * int(i > 50 and i < 100) * int(t - tresponse < 20*ms)
+    response_two += 1 * int(i > 100) * int(t - tresponse < 20*ms)
+    """
+    response_synapses = Synapses(neurons, response, pre=response_synapse_pre, connect="i > 50 and i < 150")
+    reward_function = lambda synapses: 0 if response.not_refractory[0] else (reward_amount / reward_duration)
     reward_link = RewardUnit(excitatory_synapses, reward_function)
-    network.add(reward_timer, response_link, reward_link)
+    network.add(stimulus, stimulus_synapses, response, s_r_synapse, response_synapses, reward_link)
+    return neurons, excitatory_synapses, network, params
+
+def run(name, index, duration, neurons, excitatory_synapses, network, params):
     learnability.run_sim("izhikevich3/" + name, index, duration, neurons, excitatory_synapses, network, params)
+
+def setup_and_run(name, index, duration, input_rate, connectivity, reward_delay, reward_amount, reward_duration, stdp_bias):
+    neurons, excitatory_synapses, network, params = setup(input_rate, connectivity, reward_delay, reward_amount, reward_duration, stdp_bias)
+    run(name, index, duration, neurons, excitatory_synapses, network, params)
+
+if __name__ == "__main__":
+    run_parallel(setup_and_run, get_param_search_levels('initial', (0,8)))

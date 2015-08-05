@@ -8,11 +8,11 @@ import learnability
 def get_param_search_levels(name, slice_levels=None):
     from itertools import product
     duration = 3600*second
-    input_levels = [0.0275, 0.03, 0.0325, 0.0375, 0.05]
+    input_levels = [0.0275, 0.0325, 0.0375, 0.05]
     connectivity_levels = [0.05, 0.1, 0.2]
     tau_rval_levels = [100*ms]
     rval_thresh_levels = [2.0]
-    reward_amount_levels = [1*ms, 10*ms, 100*ms]
+    reward_amount_levels = [10*ms, 100*ms]
     reward_duration_levels = [100*ms]
     bias_levels = [-0.05]
     levels = list(product(input_levels, connectivity_levels, tau_rval_levels, rval_thresh_levels,
