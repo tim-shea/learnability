@@ -16,7 +16,7 @@ def get_param_search_levels(name, slice_levels=None):
     bias_levels = [-0.05]
     levels = list(product(input_levels, connectivity_levels, reward_delay_levels,
                           reward_amount_levels, reward_duration_levels, bias_levels))
-    inputs = map(lambda i,x: (name, i, duration, x[0], x[1], x[2], x[3], x[4], [5]),
+    inputs = map(lambda i,x: (name, i, duration, x[0], x[1], x[2], x[3], x[4], x[5]),
                   range(0, len(levels)), levels)
     if slice_levels is None:
         slice_levels = (0, len(inputs))
@@ -79,4 +79,4 @@ def setup_and_run(name, index, duration, input_rate, connectivity, reward_delay,
     run(name, index, duration, neurons, excitatory_synapses, network, params)
 
 if __name__ == "__main__":
-    run_parallel(setup_and_run, get_param_search_levels('initial', (0,8)))
+    learnability.run_parallel(setup_and_run, get_param_search_levels('initial', (0,8)))
